@@ -38,7 +38,7 @@ class Binance(Feed, BinanceRestMixin):
     valid_depth_intervals = {'100ms', '1000ms'}
     websocket_channels = {
         L2_BOOK: 'depth',
-        TRADES: 'aggTrade',
+        TRADES: 'trade',
         TICKER: 'bookTicker',
         CANDLES: 'kline_',
         BALANCES: BALANCES,
@@ -171,14 +171,14 @@ class Binance(Feed, BinanceRestMixin):
     async def _trade(self, msg: dict, timestamp: float):
         """
         {
-            "e": "aggTrade",  // Event type
+            "e": "trade",  // Event type
             "E": 123456789,   // Event time
             "s": "BNBBTC",    // Symbol
-            "a": 12345,       // Aggregate trade ID
+            "t": 12345,       // Trade ID
             "p": "0.001",     // Price
             "q": "100",       // Quantity
-            "f": 100,         // First trade ID
-            "l": 105,         // Last trade ID
+            "b": 88,         // Buyer order ID
+            "a": 50,         // Seller order ID
             "T": 123456785,   // Trade time
             "m": true,        // Is the buyer the market maker?
             "M": true         // Ignore
@@ -190,7 +190,7 @@ class Binance(Feed, BinanceRestMixin):
                   Decimal(msg['q']),
                   Decimal(msg['p']),
                   self.timestamp_normalize(msg['T']),
-                  id=str(msg['a']),
+                  id=str(msg['t']),
                   raw=msg)
         await self.callback(TRADES, t, timestamp)
 
@@ -419,6 +419,19 @@ class Binance(Feed, BinanceRestMixin):
                    raw=msg)
         await self.callback(CANDLES, c, timestamp)
 
+    async def _fetch_balances(self) -> None:
+        resp = await self.balances()
+        for balance in resp:
+            if Decimal(balance["free"]) > 0:
+                b = Balance(
+                    self.id,
+                    balance["asset"],
+                    Decimal(balance["free"]),
+                    Decimal(balance["locked"]),
+                    raw={"E": time.time()}
+                )
+                await self.callback(BALANCES, b, time.time())
+
     async def _account_update(self, msg: dict, timestamp: float):
         """
         {
@@ -514,7 +527,7 @@ class Binance(Feed, BinanceRestMixin):
         if 'e' in msg:
             if msg['e'] == 'depthUpdate':
                 await self._book(msg, pair, timestamp)
-            elif msg['e'] == 'aggTrade':
+            elif msg['e'] == 'trade':
                 await self._trade(msg, timestamp)
             elif msg['e'] == 'forceOrder':
                 await self._liquidations(msg, timestamp)
@@ -539,3 +552,5 @@ class Binance(Feed, BinanceRestMixin):
             self._reset()
         if self.requires_authentication:
             create_task(self._refresh_token())
+        if self.subscription and BALANCES in self.subscription:
+            create_task(self._fetch_balances())
