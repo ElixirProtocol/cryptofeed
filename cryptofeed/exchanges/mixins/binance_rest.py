@@ -24,6 +24,7 @@ LOG = logging.getLogger('feedhandler')
 
 class BinanceRestMixin(RestExchange):
     api = "https://api.binance.com/api/v3/"
+    sandbox_api = "https://testnet.binance.vision/api/v3/"
     rest_channels = (
         TRADES, ORDER_STATUS, CANCEL_ORDER, PLACE_ORDER, BALANCES, ORDERS, CANDLES
     )
@@ -34,6 +35,9 @@ class BinanceRestMixin(RestExchange):
         IMMEDIATE_OR_CANCEL: 'IOC',
         GOOD_TIL_CANCELED: 'GTC',
     }
+
+    def __init__(self, sandbox=False, **kwargs):
+        self.sandbox = sandbox
 
     def _nonce(self):
         return str(int(round(time.time() * 1000)))
@@ -52,6 +56,9 @@ class BinanceRestMixin(RestExchange):
 
         if not api:
             api = self.api
+
+        if self.sandbox:
+            api = self.sandbox_api
 
         url = f'{api}{endpoint}?{query_string}'
         header = {}
