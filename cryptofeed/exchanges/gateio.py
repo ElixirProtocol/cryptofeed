@@ -7,16 +7,18 @@ associated with this software.
 from collections import defaultdict
 import logging
 from decimal import Decimal
+import hmac
+import hashlib
 import time
 from typing import Dict, Tuple
 
 from yapic import json
 
 from cryptofeed.connection import AsyncConnection, RestEndpoint, Routes, WebsocketEndpoint
-from cryptofeed.defines import BID, ASK, CANDLES, GATEIO, L2_BOOK, TICKER, TRADES, BUY, SELL
+from cryptofeed.defines import BID, ASK, CANDLES, GATEIO, L2_BOOK, ORDER_INFO, TICKER, TRADES, BUY, SELL, BALANCES, MARKET, LIMIT
 from cryptofeed.feed import Feed
 from cryptofeed.symbols import Symbol
-from cryptofeed.types import OrderBook, Trade, Ticker, Candle
+from cryptofeed.types import OrderBook, Trade, Ticker, Candle, Balance, OrderInfo
 from cryptofeed.util.time import timedelta_str_to_sec
 
 
@@ -33,7 +35,9 @@ class Gateio(Feed):
         L2_BOOK: 'spot.order_book_update',
         TRADES: 'spot.trades',
         TICKER: 'spot.tickers',
-        CANDLES: 'spot.candlesticks'
+        CANDLES: 'spot.candlesticks',
+        BALANCES: 'spot.balances',
+        ORDER_INFO: 'spot.orders'
     }
 
     @classmethod
@@ -230,6 +234,88 @@ class Gateio(Feed):
         )
         await self.callback(CANDLES, c, timestamp)
 
+    async def _balance(self, msg: dict, timestamp: float):
+        """
+        {
+            "time": 1605248616,
+            "channel": "spot.balances",
+            "event": "update",
+            "result": [
+                {
+                "timestamp": "1605248616",          unix timestamp in seconds
+                "timestamp_ms": "1605248616123",    unix timestamp in milliseconds
+                "user": "1000001",                  user id
+                "currency": "USDT",                 changed currency
+                "change": "100",                    changed amount
+                "total": "1032951.325075926",       total spot balance
+                "available": "1022943.325075926"    balance available to use
+                }
+            ]
+        }
+        """
+        for balance in msg['result']:
+            b = Balance(
+                self.id,
+                balance['currency'],
+                Decimal(balance['available']),
+                Decimal(balance['total']) - Decimal(balance['available']),
+                raw=msg)
+            await self.callback(BALANCES, b, timestamp)
+
+    async def _order_update(self, msg: dict, timestamp: float):
+        """
+        {
+            "time": 1605175506,
+            "channel": "spot.orders",
+            "event": "update",
+            "result": [
+                {
+                "id": "30784435",                   order id
+                "user": 123456,                     user id
+                "text": "t-abc",                    user defined information
+                "create_time": "1605175506",        order creation time
+                "create_time_ms": "1605175506123",  order creation time in milliseconds
+                "update_time": "1605175506",        order last modification time
+                "update_time_ms": "1605175506123",  order last modification time in milliseconds
+                "event": "put",                     order event (put, update, finish)
+                "currency_pair": "BTC_USDT",        currency pair
+                "type": "limit",                    order type (limit, market)
+                "account": "spot",                  account type (spot, margin)
+                "side": "sell",                     order side
+                "amount": "1",                      trade amount
+                "price": "10001",                   order price
+                "time_in_force": "gtc",             time in force (gtc, ioc, poc)
+                "left": "1",                        amount left to fill
+                "filled_total": "0",                total filled in quote currency
+                "fee": "0",                         fee deducted
+                "fee_currency": "USDT",             fee currency unit
+                "point_fee": "0",                   points used to deduct fee
+                "gt_fee": "0",                      GT used to deduct fee
+                "gt_discount": true,                whether GT fee discount is used
+                "rebated_fee": "0",                 rebated fee
+                "rebated_fee_currency": "USDT"      rebated fee currency unit
+                }
+            ]
+        }
+        """
+        for order in msg['result']:
+            oi = OrderInfo(
+                self.id,
+                self.self.exchange_symbol_to_std_symbol(order['currency_pair']),
+                order['id'],
+                SELL if order['side'].lower() == 'sell' else BUY,
+                order['event'],
+                LIMIT if order['type'].lower() == 'limit' else MARKET if order['type'].lower() == 'market' else None,
+                Decimal(order['price']),
+                Decimal(order['amount']),
+                Decimal(order['left']),
+                msg['time'],
+                order['account'],
+                order['id'],
+                raw=msg
+            )
+            self.callback(ORDER_INFO, oi, timestamp)
+
     async def message_handler(self, msg: str, conn, timestamp: float):
         msg = json.loads(msg, parse_float=Decimal)
 
@@ -250,6 +336,10 @@ class Gateio(Feed):
                 await self._process_l2_book(msg, timestamp)
             elif channel == 'candlesticks':
                 await self._candles(msg, timestamp)
+            elif channel == 'balances':
+                await self._balance(msg, timestamp)
+            elif channel == 'orders':
+                await self._order_update(msg, timestamp)
             else:
                 LOG.warning("%s: Unhandled message type %s", self.id, msg)
         else:
@@ -270,6 +360,16 @@ class Gateio(Feed):
                             "payload": [symbol, '100ms'] if nchan == L2_BOOK else [self.candle_interval, symbol],
                         }
                     ))
+            elif nchan in {BALANCES, ORDER_INFO}:
+                await conn.write(json.dumps(
+                    {
+                        "time": int(time.time()),
+                        "channel": chan,
+                        "event": 'subscribe',
+                        "payload": symbols,
+                        "auth": self.gen_sign(chan, 'subscribe', int(time.time()))
+                    }
+                ))
             else:
                 await conn.write(json.dumps(
                     {
@@ -279,3 +379,8 @@ class Gateio(Feed):
                         "payload": symbols,
                     }
                 ))
+
+    def gen_sign(self, channel, event, timestamp):
+        s = 'channel=%s&event=%s&time=%d' % (channel, event, timestamp)
+        sign = hmac.new(self.key_secret.encode('utf-8'), s.encode('utf-8'), hashlib.sha512).hexdigest()
+        return {'method': 'api_key', 'KEY': self.key_id, 'SIGN': sign}
