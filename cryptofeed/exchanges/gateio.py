@@ -135,7 +135,13 @@ class Gateio(Feed):
             }
         ]
         """
-        ret = await self.http_conn.read(self.rest_endpoints[0].route('balances', self.sandbox))
+        headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
+        sign_headers = self.gen_sign_http("GET", self.rest_endpoints[0].routes.balances)
+        headers.update(sign_headers)
+        ret = await self.http_conn.read(
+            self.rest_endpoints[0].route('balances', self.sandbox),
+            header=headers
+        )
         data = json.loads(ret, parse_float=Decimal)
 
         for balance in data:
@@ -412,6 +418,15 @@ class Gateio(Feed):
                 ))
         if self.subscription and BALANCES in self.subscription:
             await self._balance_snapshot()
+
+    def gen_sign_http(self, method, url, query_string=None, payload_string=None):
+        t = time.time()
+        m = hashlib.sha512()
+        m.update((payload_string or "").encode('utf-8'))
+        hashed_payload = m.hexdigest()
+        s = '%s\n%s\n%s\n%s\n%s' % (method, url, query_string or "", hashed_payload, t)
+        sign = hmac.new(self.key_secret.encode('utf-8'), s.encode('utf-8'), hashlib.sha512).hexdigest()
+        return {'KEY': self.key_id, 'Timestamp': str(t), 'SIGN': sign}
 
     def gen_sign(self, channel, event, timestamp):
         s = 'channel=%s&event=%s&time=%d' % (channel, event, timestamp)
