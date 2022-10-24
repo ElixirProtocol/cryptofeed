@@ -70,3 +70,6 @@ okx:
 poloniex:
     key_id: null
     key_secret: null
+gateio:
+    key_id: null
+    key_secret: null

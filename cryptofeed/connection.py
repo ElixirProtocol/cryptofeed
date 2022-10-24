@@ -396,6 +396,7 @@ class Routes:
     authentication: str = None
     l2book: str = None
     l3book: str = None
+    balances: str = None
 
 
 @dataclass
