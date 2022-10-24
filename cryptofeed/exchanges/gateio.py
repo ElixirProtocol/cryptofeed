@@ -28,7 +28,16 @@ LOG = logging.getLogger('feedhandler')
 class Gateio(Feed):
     id = GATEIO
     websocket_endpoints = [WebsocketEndpoint('wss://api.gateio.ws/ws/v4/', options={'compression': None})]
-    rest_endpoints = [RestEndpoint('https://api.gateio.ws', routes=Routes('/api/v4/spot/currency_pairs', l2book='/api/v4/spot/order_book?currency_pair={}&limit=100&with_id=true'))]
+    rest_endpoints = [
+        RestEndpoint(
+            'https://api.gateio.ws',
+            routes=Routes(
+                '/api/v4/spot/currency_pairs',
+                l2book='/api/v4/spot/order_book?currency_pair={}&limit=100&with_id=true',
+                balances='/api/v4/spot/accounts'
+            )
+        )
+    ]
 
     valid_candle_intervals = {'10s', '1m', '5m', '15m', '30m', '1h', '4h', '8h', '1d', '3d'}
     websocket_channels = {
@@ -115,6 +124,28 @@ class Gateio(Feed):
             raw=msg
         )
         await self.callback(TRADES, t, timestamp)
+
+    async def _balance_snapshot(self):
+        """
+        [
+            {
+                "currency": "ETH",
+                "available": "968.8",
+                "locked": "0"
+            }
+        ]
+        """
+        ret = await self.http_conn.read(self.rest_endpoints[0].route('balances', self.sandbox))
+        data = json.loads(ret, parse_float=Decimal)
+
+        for balance in data:
+            b = Balance(
+                self.id,
+                balance['currency'],
+                Decimal(balance['available']),
+                Decimal(balance['locked']),
+                raw=balance)
+            await self.callback(BALANCES, b, int(time.time()))
 
     async def _snapshot(self, symbol: str):
         """
@@ -379,6 +410,8 @@ class Gateio(Feed):
                         "payload": symbols,
                     }
                 ))
+        if self.subscription and BALANCES in self.subscription:
+            await self._balance_snapshot()
 
     def gen_sign(self, channel, event, timestamp):
         s = 'channel=%s&event=%s&time=%d' % (channel, event, timestamp)
