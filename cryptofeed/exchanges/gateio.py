@@ -426,7 +426,7 @@ class Gateio(Feed):
         hashed_payload = m.hexdigest()
         s = '%s\n%s\n%s\n%s\n%s' % (method, url, query_string or "", hashed_payload, t)
         sign = hmac.new(self.key_secret.encode('utf-8'), s.encode('utf-8'), hashlib.sha512).hexdigest()
-        return {'KEY': self.key_id, 'Timestamp': str(t), 'SIGN': sign}
+        return {'method': 'api_key', 'KEY': self.key_id, 'Timestamp': str(t), 'SIGN': sign}
 
     def gen_sign(self, channel, event, timestamp):
         s = 'channel=%s&event=%s&time=%d' % (channel, event, timestamp)
