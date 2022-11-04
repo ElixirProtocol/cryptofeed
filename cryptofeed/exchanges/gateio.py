@@ -340,7 +340,7 @@ class Gateio(Feed):
         for order in msg['result']:
             oi = OrderInfo(
                 self.id,
-                self.self.exchange_symbol_to_std_symbol(order['currency_pair']),
+                self.exchange_symbol_to_std_symbol(order['currency_pair']),
                 order['id'],
                 SELL if order['side'].lower() == 'sell' else BUY,
                 order['event'],
