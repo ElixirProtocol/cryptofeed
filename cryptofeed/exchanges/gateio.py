@@ -353,7 +353,7 @@ class Gateio(Feed):
                 order['id'],
                 raw=msg
             )
-            self.callback(ORDER_INFO, oi, timestamp)
+            await self.callback(ORDER_INFO, oi, timestamp)
 
     async def message_handler(self, msg: str, conn, timestamp: float):
         msg = json.loads(msg, parse_float=Decimal)
