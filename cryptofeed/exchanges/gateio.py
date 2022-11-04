@@ -150,6 +150,7 @@ class Gateio(Feed):
                 balance['currency'],
                 Decimal(balance['available']),
                 Decimal(balance['locked']),
+                timestamp=int(time.time()),
                 raw=balance)
             await self.callback(BALANCES, b, int(time.time()))
 
@@ -408,6 +409,8 @@ class Gateio(Feed):
                         "auth": self.gen_sign(chan, 'subscribe', int(time.time()))
                     }
                 ))
+                if nchan is BALANCES:
+                    await self._balance_snapshot()
             else:
                 await conn.write(json.dumps(
                     {
@@ -417,8 +420,6 @@ class Gateio(Feed):
                         "payload": symbols,
                     }
                 ))
-        if self.subscription and BALANCES in self.subscription:
-            await self._balance_snapshot()
 
     def gen_sign_http(self, method, url, query_string=None, payload_string=None):
         t = time.time()
