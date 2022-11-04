@@ -296,6 +296,7 @@ class Gateio(Feed):
                 balance['currency'],
                 Decimal(balance['available']),
                 Decimal(balance['total']) - Decimal(balance['available']),
+                timestamp=balance['timestamp'],
                 raw=msg)
             await self.callback(BALANCES, b, timestamp)
 

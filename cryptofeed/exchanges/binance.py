@@ -453,6 +453,7 @@ class Binance(Feed, BinanceRestMixin):
                 balance['a'],
                 Decimal(balance['f']),
                 Decimal(balance['l']),
+                timestamp=msg['E'],
                 raw=msg)
             await self.callback(BALANCES, b, timestamp)
 

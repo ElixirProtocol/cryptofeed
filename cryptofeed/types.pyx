@@ -595,9 +595,10 @@ cdef class Balance:
     cdef readonly str currency
     cdef readonly object balance
     cdef readonly object reserved
+    cdef readonly object timestamp
     cdef readonly dict raw
 
-    def __init__(self, exchange, currency, balance, reserved, raw=None):
+    def __init__(self, exchange, currency, balance, reserved, timestamp=-1, raw=None):
         assert isinstance(balance, Decimal)
         assert reserved is None or isinstance(reserved, Decimal)
 
@@ -605,6 +606,7 @@ cdef class Balance:
         self.currency = currency
         self.balance = balance
         self.reserved = reserved
+        self.timestamp = timestamp
         self.raw = raw
 
     cpdef dict to_dict(self, numeric_type=None, none_to=False):
