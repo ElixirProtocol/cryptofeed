@@ -15,7 +15,7 @@ from typing import Dict, Tuple
 from yapic import json
 
 from cryptofeed.connection import AsyncConnection, RestEndpoint, Routes, WebsocketEndpoint
-from cryptofeed.defines import BID, ASK, CANDLES, GATEIO, L2_BOOK, ORDER_INFO, TICKER, TRADES, BUY, SELL, BALANCES, MARKET, LIMIT
+from cryptofeed.defines import BID, ASK, CANCELLED, CANDLES, FILLED, GATEIO, L2_BOOK, OPEN, ORDER_INFO, TICKER, TRADES, BUY, SELL, BALANCES, MARKET, LIMIT
 from cryptofeed.feed import Feed
 from cryptofeed.symbols import Symbol
 from cryptofeed.types import OrderBook, Trade, Ticker, Candle, Balance, OrderInfo
@@ -301,6 +301,22 @@ class Gateio(Feed):
                 raw=msg)
             await self.callback(BALANCES, b, timestamp)
 
+    @staticmethod
+    def normalize_order_status(order: dict):
+        state = None
+        event_type = order.get("event")
+        amount_left = Decimal(order.get("left"))
+
+        if event_type == "update":
+            state = "FILLED"
+        if event_type == "finish":
+            state = "FILLED"
+            if amount_left > 0:
+                state = "CANCELED"
+        if event_type == "put":
+            state = "NEW"
+        return state
+
     async def _order_update(self, msg: dict, timestamp: float):
         """
         {
@@ -343,7 +359,7 @@ class Gateio(Feed):
                 self.exchange_symbol_to_std_symbol(order['currency_pair']),
                 order['id'],
                 SELL if order['side'].lower() == 'sell' else BUY,
-                order['event'],
+                self.normalize_order_status(order),
                 LIMIT if order['type'].lower() == 'limit' else MARKET if order['type'].lower() == 'market' else None,
                 Decimal(order['price']),
                 Decimal(order['amount']),
