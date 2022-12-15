@@ -54,9 +54,9 @@ class HTTPSync(Connection):
         r = requests.get(address, headers=headers, params=params)
         return self.process_response(r, address, json=json, text=text, uuid=uuid)
 
-    def write(self, address: str, data=None, json=False, text=True, uuid=None):
+    def write(self, address: str, data=None, json=False, text=True, uuid=None, headers=None):
         LOG.debug("HTTPSync: post to %s", address)
-        r = requests.post(address, data=data)
+        r = requests.post(address, data=data, headers=headers)
         return self.process_response(r, address, json=json, text=text, uuid=uuid)
 
 
@@ -397,6 +397,7 @@ class Routes:
     l2book: str = None
     l3book: str = None
     balances: str = None
+    ws_private_channel: str = None
 
 
 @dataclass

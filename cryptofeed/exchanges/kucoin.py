@@ -14,12 +14,12 @@ import hashlib
 
 from yapic import json
 
-from cryptofeed.defines import ASK, BID, BUY, CANDLES, KUCOIN, L2_BOOK, SELL, TICKER, TRADES
+from cryptofeed.defines import ASK, BID, BUY, CANDLES, KUCOIN, L2_BOOK, LIMIT, MARKET, SELL, TICKER, TRADES, ORDER_INFO, BALANCES
 from cryptofeed.feed import Feed
 from cryptofeed.util.time import timedelta_str_to_sec
 from cryptofeed.symbols import Symbol
 from cryptofeed.connection import AsyncConnection, RestEndpoint, Routes, WebsocketEndpoint
-from cryptofeed.types import OrderBook, Trade, Ticker, Candle
+from cryptofeed.types import OrderBook, Trade, Ticker, Candle, OrderInfo, Balance
 
 
 LOG = logging.getLogger('feedhandler')
@@ -28,14 +28,25 @@ LOG = logging.getLogger('feedhandler')
 class KuCoin(Feed):
     id = KUCOIN
     websocket_endpoints = None
-    rest_endpoints = [RestEndpoint('https://api.kucoin.com', routes=Routes('/api/v1/symbols', l2book='/api/v3/market/orderbook/level2?symbol={}'))]
+    rest_endpoints = [
+        RestEndpoint(
+            'https://api.kucoin.com',
+            routes=Routes(
+                '/api/v1/symbols',
+                l2book='/api/v3/market/orderbook/level2?symbol={}',
+                balances='/api/v1/accounts',
+                ws_private_channel='/api/v1/bullet-private'
+            )
+        )]
     valid_candle_intervals = {'1m', '3m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '1w'}
     candle_interval_map = {'1m': '1min', '3m': '3min', '15m': '15min', '30m': '30min', '1h': '1hour', '2h': '2hour', '4h': '4hour', '6h': '6hour', '8h': '8hour', '12h': '12hour', '1d': '1day', '1w': '1week'}
     websocket_channels = {
         L2_BOOK: '/market/level2',
         TRADES: '/market/match',
         TICKER: '/market/ticker',
-        CANDLES: '/market/candles'
+        CANDLES: '/market/candles',
+        ORDER_INFO: '/spotMarket/tradeOrders',
+        BALANCES: '/account/balance'
     }
 
     @classmethod
@@ -56,7 +67,9 @@ class KuCoin(Feed):
         return ret, info
 
     def __init__(self, **kwargs):
-        address_info = self.http_sync.write('https://api.kucoin.com/api/v1/bullet-public', json=True)
+        str_to_sign = "POST" + self.rest_endpoints[0].routes.ws_private_channel
+        headers = self.generate_token(str_to_sign)
+        address_info = self.http_sync.write(self.rest_endpoints[0].route('ws_private_channel', self.sandbox), json=True, headers=headers)
         token = address_info['data']['token']
         address = address_info['data']['instanceServers'][0]['endpoint']
         address = f"{address}?token={token}"
@@ -158,6 +171,123 @@ class KuCoin(Feed):
             raw=msg
         )
         await self.callback(TRADES, t, timestamp)
+
+    async def _balance_snapshot(self):
+        """
+        [
+        {
+            "id": "5bd6e9286d99522a52e458de",  //accountId
+            "currency": "BTC",  //Currency
+            "type": "main",     //Account type, including main and trade
+            "balance": "237582.04299",  //Total assets of a currency
+            "available": "237582.032",  //Available assets of a currency
+            "holds": "0.01099" //Hold assets of a currency
+        }
+        ]
+        """
+        str_to_sign = "GET" + self.rest_endpoints[0].routes.balances
+        headers = self.generate_token(str_to_sign)
+        data = await self.http_conn.read(self.rest_endpoints[0].route('balances', self.sandbox), header=headers)
+        data = json.loads(data, parse_float=Decimal)
+
+        for balance in data:
+            b = Balance(
+                self.id,
+                balance['currency'],
+                Decimal(balance['available']),
+                Decimal(balance['total']) - Decimal(balance['available']),
+                timestamp=int(time.time()),
+                raw=balance)
+            await self.callback(BALANCES, b, int(time.time()))
+
+    async def _balance(self, msg: dict, timestamp: float):
+        """
+        {
+            "type": "message",
+            "topic": "/account/balance",
+            "subject": "account.balance",
+            "channelType":"private",
+            "data": {
+                "total": "88", // total balance
+                "available": "88", // available balance
+                "availableChange": "88", // the change of available balance
+                "currency": "KCS", // currency
+                "hold": "0", // hold amount
+                "holdChange": "0", // the change of hold balance
+                "relationEvent": "trade.setted", //relation event
+                "relationEventId": "5c21e80303aa677bd09d7dff", // relation event id
+                "relationContext": {
+                    "symbol":"BTC-USDT",
+                    "tradeId":"5e6a5dca9e16882a7d83b7a4", // the trade Id when order is executed
+                    "orderId":"5ea10479415e2f0009949d54"
+                },  // the context of trade event
+                "time": "1545743136994" // timestamp
+            }
+        }
+        """
+        data = msg["data"]
+        b = Balance(
+            self.id,
+            data['currency'],
+            Decimal(data['available']),
+            Decimal(data['total']) - Decimal(data['available']),
+            timestamp=data['time'],
+            raw=data)
+        await self.callback(BALANCES, b, timestamp)
+
+    async def _order_update(self, msg: dict, timestamp: float):
+        """
+        {
+            "type":"message",
+            "topic":"/spotMarket/tradeOrders",
+            "subject":"orderChange",
+            "channelType":"private",
+            "data":{
+                "symbol":"KCS-USDT",
+                "orderType":"limit",
+                "side":"buy",
+                "orderId":"5efab07953bdea00089965d2",
+                "type":"open",
+                "orderTime":1593487481683297666,
+                "size":"0.1",
+                "filledSize":"0",
+                "price":"0.937",
+                "clientOid":"1593487481000906",
+                "remainSize":"0.1",
+                "status":"open",
+                "ts":1593487481683297666
+            }
+        }
+        """
+        data = msg["data"]
+        oi = OrderInfo(
+            self.id,
+            self.exchange_symbol_to_std_symbol(data['symbol']),
+            data['orderId'],
+            SELL if data['side'].lower() == 'sell' else BUY,
+            self.normalize_order_status(data),
+            LIMIT if data['orderType'].lower() == 'limit' else MARKET if data['orderType'].lower() == 'market' else None,
+            Decimal(data['price']),
+            Decimal(data['size']),
+            Decimal(data['remainSize']),
+            data["ts"],
+            data["clientOid"],
+            raw=data
+        )
+        await self.callback(ORDER_INFO, oi, timestamp)
+
+    @staticmethod
+    def normalize_order_status(order: dict):
+        state = None
+        event_type = order.get("type")
+
+        if event_type == "filled":
+            state = "FILLED"
+        if event_type == "canceled":
+            state = "CANCELED"
+        if event_type == "open":
+            state = "NEW"
+        return state
 
     def generate_token(self, str_to_sign: str) -> dict:
         # https://docs.kucoin.com/#authentication
@@ -263,6 +393,10 @@ class KuCoin(Feed):
             await self._candles(msg, symbol, timestamp)
         elif topic == L2_BOOK:
             await self._process_l2_book(msg, symbol, timestamp)
+        elif topic == ORDER_INFO:
+            await self._order_update(msg, symbol, timestamp)
+        elif topic == BALANCES:
+            await self._balance(msg, symbol, timestamp)
         else:
             LOG.warning("%s: Unhandled message type %s", self.id, msg)
 
@@ -280,6 +414,16 @@ class KuCoin(Feed):
                         'privateChannel': False,
                         'response': True
                     }))
+            elif nchan in (BALANCES, ORDER_INFO):
+                await conn.write(json.dumps({
+                    'id': 1,
+                    'type': 'subscribe',
+                    'topic': chan,
+                    'privateChannel': True,
+                    'response': True
+                }))
+                if nchan == BALANCES:
+                    await self._balance_snapshot()
             else:
                 for slice_index in range(0, len(symbols), 100):
                     await conn.write(json.dumps({
