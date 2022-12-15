@@ -31,24 +31,28 @@ class Exchange:
     candle_interval_map = NotImplemented
     http_sync = HTTPSync()
     allow_empty_subscriptions = False
+    config = None
+    sandbox = None
 
     def __init__(self, config=None, sandbox=False, subaccount=None, **kwargs):
-        self.config = Config(config=config)
+        self._load_config(config, subaccount)
+
         self.sandbox = sandbox
         self.subaccount = subaccount
-
-        keys = self.config[self.id.lower()] if self.subaccount is None else self.config[self.id.lower()][self.subaccount]
-        self.key_id = keys.key_id
-        self.key_secret = keys.key_secret
-        self.key_passphrase = keys.key_passphrase
-        self.account_name = keys.account_name
-
         self.ignore_invalid_instruments = self.config.ignore_invalid_instruments
-
         if not Symbols.populated(self.id):
             self.symbol_mapping()
         self.normalized_symbol_mapping, _ = Symbols.get(self.id)
         self.exchange_symbol_mapping = {value: key for key, value in self.normalized_symbol_mapping.items()}
+
+    def _load_config(self, config=None, subaccount=None):
+        if self.config is None:
+            self.config = Config(config=config)
+        keys = self.config[self.id.lower()] if subaccount is None else self.config[self.id.lower()][subaccount]
+        self.key_id = keys.key_id
+        self.key_secret = keys.key_secret
+        self.key_passphrase = keys.key_passphrase
+        self.account_name = keys.account_name
 
     @classmethod
     def timestamp_normalize(cls, ts: dt) -> float:

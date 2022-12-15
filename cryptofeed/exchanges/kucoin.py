@@ -67,6 +67,7 @@ class KuCoin(Feed):
         return ret, info
 
     def __init__(self, **kwargs):
+        self._load_config(kwargs.get("config"))
         str_to_sign = "POST" + self.rest_endpoints[0].routes.ws_private_channel
         headers = self.generate_token(str_to_sign)
         address_info = self.http_sync.write(self.rest_endpoints[0].route('ws_private_channel', self.sandbox), json=True, headers=headers)
@@ -173,29 +174,18 @@ class KuCoin(Feed):
         await self.callback(TRADES, t, timestamp)
 
     async def _balance_snapshot(self):
-        """
-        [
-        {
-            "id": "5bd6e9286d99522a52e458de",  //accountId
-            "currency": "BTC",  //Currency
-            "type": "main",     //Account type, including main and trade
-            "balance": "237582.04299",  //Total assets of a currency
-            "available": "237582.032",  //Available assets of a currency
-            "holds": "0.01099" //Hold assets of a currency
-        }
-        ]
-        """
         str_to_sign = "GET" + self.rest_endpoints[0].routes.balances
         headers = self.generate_token(str_to_sign)
-        data = await self.http_conn.read(self.rest_endpoints[0].route('balances', self.sandbox), header=headers)
-        data = json.loads(data, parse_float=Decimal)
+        ret = await self.http_conn.read(self.rest_endpoints[0].route('balances', self.sandbox), header=headers)
+        result = json.loads(ret, parse_float=Decimal)
+        data = result["data"]
 
         for balance in data:
             b = Balance(
                 self.id,
                 balance['currency'],
                 Decimal(balance['available']),
-                Decimal(balance['total']) - Decimal(balance['available']),
+                Decimal(balance['balance']) - Decimal(balance['available']),
                 timestamp=int(time.time()),
                 raw=balance)
             await self.callback(BALANCES, b, int(time.time()))
@@ -270,8 +260,7 @@ class KuCoin(Feed):
             Decimal(data['price']),
             Decimal(data['size']),
             Decimal(data['remainSize']),
-            data["ts"],
-            data["clientOid"],
+            data["ts"] / 1000,
             raw=data
         )
         await self.callback(ORDER_INFO, oi, timestamp)
@@ -382,7 +371,11 @@ class KuCoin(Feed):
                 LOG.warning("%s: Unhandled message type %s", self.id, msg)
                 return
 
-        topic, symbol = msg['topic'].split(":", 1)
+        if ":" in msg['topic']:
+            topic, symbol = msg['topic'].split(":", 1)
+        else:
+            topic = msg['topic']
+
         topic = self.exchange_channel_to_std(topic)
 
         if topic == TICKER:
@@ -394,9 +387,9 @@ class KuCoin(Feed):
         elif topic == L2_BOOK:
             await self._process_l2_book(msg, symbol, timestamp)
         elif topic == ORDER_INFO:
-            await self._order_update(msg, symbol, timestamp)
+            await self._order_update(msg, timestamp)
         elif topic == BALANCES:
-            await self._balance(msg, symbol, timestamp)
+            await self._balance(msg, timestamp)
         else:
             LOG.warning("%s: Unhandled message type %s", self.id, msg)
 
