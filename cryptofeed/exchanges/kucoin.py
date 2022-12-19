@@ -343,7 +343,11 @@ class KuCoin(Feed):
 
         self.seq_no[symbol] = data['sequenceEnd']
 
-        ts = data['time'] / 1000
+        if 'time' in data:
+            ts = data['time'] / 1000
+        else:
+            LOG.debug("No timestamp data returned by Kucoin websocket.")
+            ts = None
         delta = {BID: [], ASK: []}
         for s, side in (('bids', BID), ('asks', ASK)):
             for update in data['changes'][s]:
