@@ -310,7 +310,7 @@ class KuCoin(Feed):
         asks = {Decimal(price): Decimal(amount) for price, amount in data['asks']}
         self._l2_book[symbol] = OrderBook(self.id, symbol, max_depth=self.max_depth, bids=bids, asks=asks)
 
-        await self.book_callback(L2_BOOK, self._l2_book[symbol], timestamp, raw=data, sequence_number=int(data['sequence']))
+        await self.book_callback(L2_BOOK, self._l2_book[symbol], timestamp, timestamp=timestamp, raw=data, sequence_number=int(data['sequence']))
 
     async def _process_l2_book(self, msg: dict, symbol: str, timestamp: float):
         """
