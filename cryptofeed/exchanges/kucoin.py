@@ -181,14 +181,15 @@ class KuCoin(Feed):
         data = result["data"]
 
         for balance in data:
-            b = Balance(
-                self.id,
-                balance['currency'],
-                Decimal(balance['available']),
-                Decimal(balance['balance']) - Decimal(balance['available']),
-                timestamp=int(time.time()),
-                raw=balance)
-            await self.callback(BALANCES, b, int(time.time()))
+            if balance['type'] == "trade":
+                b = Balance(
+                    self.id,
+                    balance['currency'],
+                    Decimal(balance['available']),
+                    Decimal(balance['balance']) - Decimal(balance['available']),
+                    timestamp=int(time.time()),
+                    raw=balance)
+                await self.callback(BALANCES, b, int(time.time()))
 
     async def _balance(self, msg: dict, timestamp: float):
         """
@@ -343,6 +344,8 @@ class KuCoin(Feed):
 
         self.seq_no[symbol] = data['sequenceEnd']
 
+        LOG.warning(data)
+
         ts = data['time'] / 1000
         delta = {BID: [], ASK: []}
         for s, side in (('bids', BID), ('asks', ASK)):
@@ -420,6 +423,8 @@ class KuCoin(Feed):
                 if nchan == BALANCES:
                     await self._balance_snapshot()
             else:
+                if nchan == L2_BOOK:
+                    await self._snapshot(symbols[0])
                 for slice_index in range(0, len(symbols), 100):
                     await conn.write(json.dumps({
                         'id': 1,
