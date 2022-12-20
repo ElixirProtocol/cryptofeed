@@ -337,7 +337,6 @@ class KuCoin(Feed):
             if symbol in self.seq_no and sequence > self.seq_no[symbol] + 1:
                 LOG.warning("%s: Missing book update detected, resetting book", self.id)
             await self._snapshot(symbol)
-            return
 
         data = msg['data']
         if sequence < self.seq_no[symbol]:
