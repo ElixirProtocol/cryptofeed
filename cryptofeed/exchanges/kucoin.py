@@ -344,8 +344,6 @@ class KuCoin(Feed):
 
         self.seq_no[symbol] = data['sequenceEnd']
 
-        LOG.warning(data)
-
         ts = data['time'] / 1000
         delta = {BID: [], ASK: []}
         for s, side in (('bids', BID), ('asks', ASK)):
