@@ -251,20 +251,24 @@ class KuCoin(Feed):
         }
         """
         data = msg["data"]
-        oi = OrderInfo(
-            self.id,
-            self.exchange_symbol_to_std_symbol(data['symbol']),
-            data['orderId'],
-            SELL if data['side'].lower() == 'sell' else BUY,
-            self.normalize_order_status(data),
-            LIMIT if data['orderType'].lower() == 'limit' else MARKET if data['orderType'].lower() == 'market' else None,
-            Decimal(data['price']),
-            Decimal(data['size']),
-            Decimal(data['remainSize']),
-            data["ts"] / 1000,
-            raw=data
-        )
-        await self.callback(ORDER_INFO, oi, timestamp)
+        if "price" in data:
+            oi = OrderInfo(
+                self.id,
+                self.exchange_symbol_to_std_symbol(data['symbol']),
+                data['orderId'],
+                SELL if data['side'].lower() == 'sell' else BUY,
+                self.normalize_order_status(data),
+                LIMIT if data['orderType'].lower() == 'limit' else MARKET if data['orderType'].lower() == 'market' else None,
+                Decimal(data['price']),
+                Decimal(data['size']),
+                Decimal(data['remainSize']),
+                data["ts"] / 1000,
+                raw=data
+            )
+            await self.callback(ORDER_INFO, oi, timestamp)
+        else:
+            LOG.warning("Key error: 'price' not in _order_update message data.")
+            LOG.warning(data)
 
     @staticmethod
     def normalize_order_status(order: dict):
