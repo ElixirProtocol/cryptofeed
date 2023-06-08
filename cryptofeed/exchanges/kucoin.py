@@ -18,6 +18,7 @@ from cryptofeed.defines import ASK, BID, BUY, CANDLES, KUCOIN, L2_BOOK, LIMIT, M
 from cryptofeed.feed import Feed
 from cryptofeed.util.time import timedelta_str_to_sec
 from cryptofeed.symbols import Symbol
+from cryptofeed.exchanges.mixins.kucoin_rest import KucoinRestMixin
 from cryptofeed.connection import AsyncConnection, RestEndpoint, Routes, WebsocketEndpoint
 from cryptofeed.types import OrderBook, Trade, Ticker, Candle, OrderInfo, Balance
 
@@ -25,7 +26,7 @@ from cryptofeed.types import OrderBook, Trade, Ticker, Candle, OrderInfo, Balanc
 LOG = logging.getLogger('feedhandler')
 
 
-class KuCoin(Feed):
+class KuCoin(Feed, KucoinRestMixin):
     id = KUCOIN
     websocket_endpoints = None
     rest_endpoints = [
