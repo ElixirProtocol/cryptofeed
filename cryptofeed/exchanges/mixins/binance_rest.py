@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 
 from yapic import json
 
-from cryptofeed.defines import BALANCES, BUY, CANCEL_ORDER, CANDLES, DELETE, FILL_OR_KILL, GET, GOOD_TIL_CANCELED, IMMEDIATE_OR_CANCEL, LIMIT, MARKET, ORDERS, ORDER_STATUS, PLACE_ORDER, POSITIONS, POST, SELL, TRADES
+from cryptofeed.defines import BALANCES, BUY, CANCEL_ORDER, CANDLES, DELETE, FILL_OR_KILL, GET, GOOD_TIL_CANCELED, IMMEDIATE_OR_CANCEL, LIMIT, MARKET, ORDERS, ORDER_STATUS, PLACE_ORDER, POSITIONS, POST, SELL, TRADES, TRADE_HISTORY
 from cryptofeed.exchange import RestExchange
 from cryptofeed.types import Candle
 
@@ -26,7 +26,7 @@ class BinanceRestMixin(RestExchange):
     api = "https://api.binance.com/api/v3/"
     sandbox_api = "https://testnet.binance.vision/api/v3/"
     rest_channels = (
-        TRADES, ORDER_STATUS, CANCEL_ORDER, PLACE_ORDER, BALANCES, ORDERS, CANDLES
+        TRADES, ORDER_STATUS, CANCEL_ORDER, PLACE_ORDER, BALANCES, ORDERS, CANDLES, TRADE_HISTORY
     )
     order_options = {
         LIMIT: 'LIMIT',
@@ -140,6 +140,32 @@ class BinanceRestMixin(RestExchange):
             if len(data) < 1000 or end is None:
                 break
             await asyncio.sleep(1 / self.request_limit)
+
+    async def trade_history(self, symbol: str, start=None, end=None):
+        sym = self.std_symbol_to_exchange_symbol(symbol)
+
+        params = {
+            'symbol': sym,
+            'limit': 1000
+        }
+        if start:
+            params['startTime'] = self._datetime_normalize(start) * 1000
+
+        data = await self._request(GET, 'myTrades', auth=True, payload=params)
+        return [
+            {
+                'symbol': symbol,
+                'price': Decimal(trade['price']),
+                'amount': Decimal(trade['qty']),
+                'timestamp': trade['time'] / 1000,
+                'side': BUY if trade['isBuyer'] else SELL,
+                'fee_currency': trade['commissionAsset'],
+                'fee_amount': trade['commission'],
+                'trade_id': trade['id'],
+                'order_id': trade['orderId']
+            }
+            for trade in data
+        ]
 
     # Trading APIs
     async def place_order(self, symbol: str, side: str, order_type: str, amount: Decimal, price=None, time_in_force=None, test=False):

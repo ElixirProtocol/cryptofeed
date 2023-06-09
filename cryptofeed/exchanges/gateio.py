@@ -18,6 +18,7 @@ from cryptofeed.connection import AsyncConnection, RestEndpoint, Routes, Websock
 from cryptofeed.defines import BID, ASK, CANCELLED, CANDLES, FILLED, GATEIO, L2_BOOK, OPEN, ORDER_INFO, TICKER, TRADES, BUY, SELL, BALANCES, MARKET, LIMIT
 from cryptofeed.feed import Feed
 from cryptofeed.symbols import Symbol
+from cryptofeed.exchanges.mixins.gateio_rest import GateioRestMixin
 from cryptofeed.types import OrderBook, Trade, Ticker, Candle, Balance, OrderInfo
 from cryptofeed.util.time import timedelta_str_to_sec
 
@@ -25,7 +26,7 @@ from cryptofeed.util.time import timedelta_str_to_sec
 LOG = logging.getLogger('feedhandler')
 
 
-class Gateio(Feed):
+class Gateio(Feed, GateioRestMixin):
     id = GATEIO
     websocket_endpoints = [WebsocketEndpoint('wss://api.gateio.ws/ws/v4/', options={'compression': None})]
     rest_endpoints = [
