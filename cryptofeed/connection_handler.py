@@ -17,7 +17,7 @@ from websockets.exceptions import InvalidStatusCode
 
 from cryptofeed.connection import AsyncConnection
 from cryptofeed.exceptions import ExhaustedRetries
-from cryptofeed.defines import HUOBI, HUOBI_DM, HUOBI_SWAP, OKCOIN, OKX
+from cryptofeed.defines import HUOBI, HUOBI_DM, HUOBI_SWAP, OKCOIN, OKX, VERTEX
 
 
 LOG = logging.getLogger('feedhandler')
@@ -109,9 +109,22 @@ class ConnectionHandler:
         else:
             LOG.error('%s: failed to reconnect after %d retries - exiting', self.conn.uuid, retries)
             raise ExhaustedRetries()
+        
+    async def _keep_alive(self, connection):
+        """
+        Coroutine to send PING messages at regular intervals.
+        """
+        while self.running:
+            await connection.write('PING')
+            await asyncio.sleep(30)
 
     async def _handler(self, connection, handler):
         try:
+            # Create a task for sending PING messages
+            if VERTEX in connection.uuid:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._keep_alive(connection))
+
             async for message in connection.read():
                 if not self.running:
                     await connection.close()
