@@ -13,5 +13,65 @@ ignore_invalid_instruments: False
 backend_multiprocessing: False
 
 # Secrets for exchanges
+binance_futures:
+    key_id: null
+    key_secret: null
+binance_delivery:
+    key_id: null
+    key_secret: null
+bit.com:
+    key_id: null
+    key_secret: null
+bitget:
+    key_id: null
+    key_secret: null
+    key_passphrase: null
+bitmex:
+    key_id: null
+    key_secret: null
+bitfinex:
+    key_id: null
+    key_secret: null
+coinbase:
+    key_id: null
+    key_secret: null
+    key_passphrase: null
+deribit:
+    key_id: null
+    key_secret: null
+ftx:
+    example_subaccount_name_1:   # subaccounts are supported on FTX
+        key_id: null
+        key_secret: null
+    example_subaccount_name_2:
+        key_id: null
+        key_secret: null
+    key_id: null
+    key_secret: null
+gemini:
+    key_id: null
+    key_secret: null
+    account_name: null   # this is an optional param needed only when using a master api key
+kraken:
+    key_id: null
+    key_secret: null
+kucoin:
+    key_id: null
+    key_secret: null
+    key_passphrase: null
+okcoin:
+    key_id: null
+    key_secret: null
+    key_passphrase: null
+okx:
+    key_id: null
+    key_secret: null
+    key_passphrase: null
+poloniex:
+    key_id: null
+    key_secret: null
+gateio:
+    key_id: null
+    key_secret: null
 vertex:
     account_name: "0x5494c260fd71799414d174aa802750efa2dca5dd64656661756c740000000000"
