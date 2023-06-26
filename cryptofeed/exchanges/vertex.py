@@ -183,8 +183,9 @@ class Vertex(Feed, VertexRestMixin):
             for symbol in symbols:
                 if chan == "fill" or chan == "position_change":
                     if chan == "position_change":
-                        b = await self.balance_snapshot()
-                        await self.callback(BALANCES, b, time.time())
+                        resp = await self.balance_snapshot()
+                        for balance in resp:
+                            await self.callback(BALANCES, balance, time.time())
                     msg = {
                         "method": "subscribe",
                         "stream": {

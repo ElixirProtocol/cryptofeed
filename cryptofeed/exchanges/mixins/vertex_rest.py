@@ -35,14 +35,15 @@ class VertexRestMixin(RestExchange):
         result = []
 
         for balance in data['data']['spot_balances']:
-            b = Balance(
-                self.id,
-                self.exchange_symbol_to_std_symbol(balance['product_id']).split("-")[0],
-                Decimal(balance['balance']['amount']) / UNITS,
-                Decimal(0),  # Consider '0' as we don't have a corresponding value in the JSON data.
-                timestamp=int(time.time()),
-                raw=balance)
-            result.append(b)
+            if Decimal(balance['balance']['amount']) > 0:
+                b = Balance(
+                    self.id,
+                    self.exchange_symbol_to_std_symbol(balance['product_id']).split("-")[0],
+                    Decimal(balance['balance']['amount']) / UNITS,
+                    Decimal(0),  # Consider '0' as we don't have a corresponding value in the JSON data.
+                    timestamp=int(time.time()),
+                    raw=balance)
+                result.append(b)
         return result
 
     async def l2_book(self, symbol: str, retry_count=1, retry_delay=60) -> OrderBook:
