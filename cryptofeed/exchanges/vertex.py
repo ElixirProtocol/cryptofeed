@@ -21,11 +21,12 @@ from cryptofeed.types import Trade, OrderInfo, Balance
 
 LOG = logging.getLogger('feedhandler')
 
+UNITS = Decimal(1e18)
 
 class Vertex(Feed, VertexRestMixin):
     id = VERTEX
-    websocket_endpoints = [WebsocketEndpoint('wss://prod.vertexprotocol-backend.com/subscribe')]
-    rest_endpoints = [RestEndpoint('https://prod.vertexprotocol-backend.com')]
+    websocket_endpoints = [WebsocketEndpoint('wss://prod.vertexprotocol-backend.com/subscribe', sandbox="wss://test.vertexprotocol-backend.com/subscribe")]
+    rest_endpoints = [RestEndpoint('https://prod.vertexprotocol-backend.com', sandbox="https://test.vertexprotocol-backend.com")]
 
     websocket_channels = {
         L2_BOOK: 'book_depth',
@@ -65,7 +66,7 @@ class Vertex(Feed, VertexRestMixin):
     def _parse_symbol_data(cls) -> Tuple[Dict, Dict]:
         info = {'instrument_type': {}}
         ret = {}
-        mapping = { "USDC": 0, "WBTC-USDC": 1, "WETH-USDC": 3 }
+        mapping = { "USDC": 0, "WBTC-USDC": 1, "WETH-USDC": 3, "PLACEHOLDER1": 5, "PLACEHOLDER2": 7, "PLACEHOLDER3": 9, "PLACEHOLDER4": 11, "PLACEHOLDER5": 13 }
 
         for k,v in mapping.items():
             if "-" in k:
@@ -81,22 +82,19 @@ class Vertex(Feed, VertexRestMixin):
     @classmethod
     def is_authenticated_channel(cls, channel: str) -> bool:
         return False
-
+    
     async def _book(self, msg: dict, timestamp: float):
         product_id = msg['product_id']
         pair = self.exchange_symbol_to_std_symbol(product_id)
         delta = {BID: [], ASK: []}
-
-        if pair not in self._l2_book:
-            self._l2_book[pair] = await self.l2_book(pair)
 
         if msg['type'] == 'book_depth':
             updated = False
 
             for side, key in ((BID, 'bids'), (ASK, 'asks')):
                 for data in msg[key]:
-                    price = Decimal(data[0])
-                    amount = Decimal(data[1])
+                    price = Decimal(data[0]) / UNITS
+                    amount = Decimal(data[1]) / UNITS
 
                     updated = True
 
@@ -114,8 +112,8 @@ class Vertex(Feed, VertexRestMixin):
         pair = self.exchange_symbol_to_std_symbol(msg['product_id'])
         
         trade_side = BUY if msg['is_taker_buyer'] else SELL
-        trade_size = Decimal(msg['taker_qty'])
-        trade_price = Decimal(msg['price'])
+        trade_size = Decimal(msg['taker_qty']) / UNITS
+        trade_price = Decimal(msg['price']) / UNITS
         trade_timestamp = self.timestamp_normalize(msg['timestamp'])
 
         t = Trade(
@@ -138,12 +136,12 @@ class Vertex(Feed, VertexRestMixin):
             BUY if msg['is_bid'] else SELL,
             "FILLED",
             None,
-            Decimal(msg['price']),
-            Decimal(msg['original_qty']),
+            Decimal(msg['price']) / UNITS,
+            Decimal(msg['original_qty']) / UNITS,
             Decimal(msg['remaining_qty']),
             self.timestamp_normalize(msg['timestamp']),
-            msg['subaccount'],
             msg['order_digest'],
+            msg['subaccount'],
             raw=msg
         )
         await self.callback(ORDER_INFO, oi, timestamp)
@@ -152,7 +150,7 @@ class Vertex(Feed, VertexRestMixin):
         b = Balance(
             self.id,
             self.exchange_symbol_to_std_symbol(msg['product_id']),
-            Decimal(msg['amount']),
+            Decimal(msg['amount']) / UNITS,
             Decimal(0),
             self.timestamp_normalize(msg['timestamp']),
             raw=msg)
@@ -198,6 +196,11 @@ class Vertex(Feed, VertexRestMixin):
                     }
                     await conn.write(json.dumps(msg))
                 else:
+                    if chan == "book_depth":
+                        pair = self.exchange_symbol_to_std_symbol(symbol)
+                        book = await self.l2_book(pair)
+                        self._l2_book[pair] = book
+                        await self.callback(L2_BOOK, book, time.time())
                     msg = {
                         "method": "subscribe",
                         "stream": { "type": chan, "product_id": symbol},
