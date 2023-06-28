@@ -49,6 +49,7 @@ from .okx import OKX
 from .poloniex import Poloniex
 from .probit import Probit
 from .upbit import Upbit
+from .injective import Injective
 
 # Maps string name to class name for use with config
 EXCHANGE_MAP = {
@@ -95,4 +96,5 @@ EXCHANGE_MAP = {
     POLONIEX: Poloniex,
     PROBIT: Probit,
     UPBIT: Upbit,
+    INJECTIVE: Injective,
 }

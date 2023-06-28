@@ -70,3 +70,6 @@ okx:
 poloniex:
     key_id: null
     key_secret: null
+injective:
+    address: "inj19rxdk5cc2ngf6jrnxfsk3rwpv70mngjzqf9jwh"
+    subaccount: "0x28ccdb531854d09d48733261688dc1679fb9a242000000000000000000000000"
