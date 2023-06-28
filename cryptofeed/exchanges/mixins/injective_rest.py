@@ -17,7 +17,7 @@ from pyinjective.wallet import PrivateKey
 
 LOG = logging.getLogger('feedhandler')
 
-
+# TODO - The fetch_markets function already cover these
 markets = {
     'WETH/USDC': '0x01e920e081b6f3b2e5183399d5b6733bb6f80319e6be3805b95cb7236910ff0e',
     'INJ/USDC': '0xe0dc13205fb8b23111d8555a6402681965223135d368eeeb964681f9ff12eb2a',
@@ -129,13 +129,15 @@ class InjectiveRestMixin(RestExchange):
         # sym = self.std_symbol_to_exchange_symbol(symbol)
         if symbol in self.markets:
             market_id = self.markets[symbol].market_id
-            base_endpoint = "/api/exchange/spot/v1/ordersHistory"
+            base_endpoint = "/api/exchange/spot/v2/orderbooks"
             query = f"?subaccountId={self.subaccount}&marketId={market_id}"
             data = await self.http_conn.read(f"{self.api}{base_endpoint}{query}")
             data = json.loads(data, parse_float=Decimal)
-            ret.book.bids = {Decimal(entry["price"]): Decimal(entry["quantity"]) for entry in data['bids']}
-            ret.book.asks = {Decimal(entry["price"]): Decimal(entry["quantity"]) for entry in data['asks']}
-            ret.timestamp = data['timestamp']
+            if len(data["order_books"]) > 0:
+                order_book = data["order_books"][0]["order_book"]
+                ret.book.bids = {Decimal(entry["price"]): Decimal(entry["quantity"]) for entry in order_book['buys']}
+                ret.book.asks = {Decimal(entry["price"]): Decimal(entry["quantity"]) for entry in order_book['sells']}
+                ret.timestamp = data['timestamp']
             return ret
         else:
             LOG.error(f"Symbol {symbol} not found")
@@ -158,8 +160,8 @@ class InjectiveRestMixin(RestExchange):
                     'amount': Decimal(order['quantity']),
                     'timestamp': order['createdAt'],
                     'side': BUY if order['direction'] == 'buy' else SELL,
-                    'trade_id': order['0x92da72606d9d26bbc5a8a5578373c6bbe11e39d0944788b5cd142a14d01f9d36'],
-                    'order_id': order['0x4f4391f8ee11f656d0a9396370c6991f59c4bb491214e8b6ab2011a1bcf1c44e']
+                    'trade_id': order['txHash'],
+                    'order_id': order['orderHash']
                 }
                 for order in data['orders']
             ]

@@ -31,10 +31,10 @@ class Injective(Feed, InjectiveRestMixin):
         BALANCES,
     )
     websocket_channels = {
-        L2_BOOK: '/api/exchange/spot/v1/ordersHistory',
-        TRADES: '/api/exchange/spot/v1/ordersHistory',
-        ORDER_INFO: '/api/exchange/spot/v1/ordersHistory',
-        BALANCES: '/api/exchange/spot/v1/ordersHistory',
+        L2_BOOK: '',
+        TRADES: '',
+        ORDER_INFO: '',
+        BALANCES: '',
     }
     request_limit = 10
 
@@ -44,13 +44,6 @@ class Injective(Feed, InjectiveRestMixin):
 
     def __reset(self):
         self._l2_book = {}
-
-    @classmethod
-    def timestamp_normalize(cls, ts: str) -> float:
-        """
-        Normalize a timestamp provided as a string in nanoseconds to miliseconds.
-        """
-        return float(ts) / 1_000_000.0
 
     @classmethod
     def symbol_mapping(cls, refresh=False) -> Dict:
@@ -88,6 +81,7 @@ class Injective(Feed, InjectiveRestMixin):
         return False
 
     async def _book(self, msg: dict, timestamp: float):
+        # TODO - Change the balance value according to the injective payload
         LOG.error("book")
         product_id = msg['product_id']
         pair = self.exchange_symbol_to_std_symbol(product_id)
@@ -117,6 +111,7 @@ class Injective(Feed, InjectiveRestMixin):
                 await self.book_callback(L2_BOOK, self._l2_book[pair], time.time(), timestamp, delta=delta, raw=msg)
 
     async def _trade(self, msg: dict, timestamp: float):
+        # TODO - Change the balance value according to the injective payload
         LOG.error("trade")
         pair = self.exchange_symbol_to_std_symbol(msg['product_id'])
 
@@ -138,6 +133,7 @@ class Injective(Feed, InjectiveRestMixin):
         await self.callback(TRADES, t, timestamp)
 
     async def _order_update(self, msg: dict, timestamp: float):
+        # TODO - Change the balance value according to the injective payload
         LOG.error("orderupd")
         oi = OrderInfo(
             self.id,
@@ -157,6 +153,7 @@ class Injective(Feed, InjectiveRestMixin):
         await self.callback(ORDER_INFO, oi, timestamp)
 
     async def _balance(self, msg: dict, timestamp: float):
+        # TODO - Change the balance value according to the injective payload
         LOG.error("balance")
         b = Balance(
             self.id,
@@ -167,23 +164,13 @@ class Injective(Feed, InjectiveRestMixin):
             raw=msg)
         await self.callback(BALANCES, b, timestamp)
 
-    async def message_handler(self, msg: str, conn: AsyncConnection, timestamp: float):
-        LOG.error("msg")
-        msg = json.loads(msg, parse_float=Decimal)
+    async def subscribe(self, conn: AsyncConnection):
+        self.__reset()
 
-        if 'type' in msg:
-            chan = self.exchange_channel_to_std(msg['type'])
-            if chan == L2_BOOK:
-                await self._book(msg, timestamp)
-            elif chan == TRADES:
-                await self._trade(msg, timestamp)
-            elif chan == ORDER_INFO:
-                await self._order_update(msg, timestamp)
-            elif chan == BALANCES:
-                await self._balance(msg, timestamp)
-            else:
-                LOG.warning("%s: unexpected channel type received: %s", self.id, msg)
-        elif 'result' in msg and msg['result'] is None:
-            return
-        else:
-            LOG.warning("%s: Invalid message type %s", self.id, msg)
+        LOG.error("subscribe")
+        await self.fetch_markets()
+        for chan, symbols in self.subscription.items():
+            LOG.error(f"channel: {chan}")
+            if chan == BALANCES:
+                balance = self.balance_snapshot()
+                self._balance(balance, time.time())
